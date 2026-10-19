@@ -1,0 +1,1 @@
+// all admin routes in this file

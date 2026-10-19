@@ -1,13 +1,12 @@
 import { ENV } from "./env";
 
 const defaults = {
-	port: 5001,
-	version: 1,
+  port: 5001,
 };
 
 const config = {
-	defaults: defaults,
-	apiEndPoint: `http://localhost:${ENV.PORT || defaults.port}/api/v${defaults.version}`,
+  defaults: defaults,
+  apiEndPoint: `http://localhost:${ENV.PORT}/`,
 };
 
 export { config };

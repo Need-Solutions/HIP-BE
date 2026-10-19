@@ -5,20 +5,22 @@ import bootstrap from "./bootstrap";
 import { allowedOrigins } from "./bootstrap/cors";
 import { config } from "./config/config";
 import logger from "./utils/logging";
+import { RunSeeders } from "./database/seeders";
 
 const server = createServer(app);
 
 export const io = new Server(server, {
-	cors: { origin: allowedOrigins, credentials: true },
+  cors: { origin: allowedOrigins, credentials: true },
 });
 
 async function main() {
-	await bootstrap.handleDBConnect();
-	server.listen(port, () => {
-		logger.general.info(`listening on ${config.apiEndPoint}.`);
-	});
+  await bootstrap.handleDBConnect();
+  await RunSeeders();
+  server.listen(port, () => {
+    logger.general.info(`listening on ${config.apiEndPoint}.`);
+  });
 }
 
 main().catch(() => {
-	process.exit(1);
+  process.exit(1);
 });
