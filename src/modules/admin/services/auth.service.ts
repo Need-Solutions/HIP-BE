@@ -195,6 +195,11 @@ export const verify = async (challengeId: string, code: string) => {
     ...(challenge.method === "email" ? { codeHash: challenge.codeHash } : {}),
   });
   if (!consumed) throw expired();
+  // Record successful sign-in activity without exposing setup state or private fields.
+  await AdminModel.updateOne(
+    { _id: admin._id },
+    { $set: { lastActiveAt: new Date() } },
+  );
   return {
     data: toStaffResponse(admin),
     session: createStaffSession(admin, admin.twoStepEnabled ? "full" : "setup"),
@@ -261,5 +266,4 @@ export const resend = async (challengeId: string) => {
   return challengeResponse(updated, admin);
 };
 
-// TODO(Controller 4): super-admin-only reset of another staff member's two-step setup,
-// with session/challenge revocation. There is deliberately no email fallback for enrolled staff.
+// Enrolled staff never have an email fallback. Controller 4 resets and revokes their setup explicitly.

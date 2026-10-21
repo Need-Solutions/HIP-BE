@@ -31,6 +31,11 @@ import {
   hashCode,
   deliverCode,
 } from "./verification-code.service";
+import {
+  countGuestTickets,
+  mergeGuestTickets,
+} from "../../tickets/services/ticket-linking.service";
+import { transaction } from "../../../shared/database/transaction";
 
 const HASH_ROUNDS = 12;
 const RESET_TTL_MS = 30 * 60 * 1000;
@@ -70,7 +75,7 @@ const codeFields = (channel: Channel) => {
   };
 };
 
-const verificationResponse = (
+const verificationResponse = async (
   verification: {
     verificationId: string;
     channel: Channel;
@@ -85,8 +90,7 @@ const verificationResponse = (
       ? maskEmail(user.email)
       : maskPhone(user.phone),
   resendAvailableAt: verification.resendAvailableAt.toISOString(),
-  // TODO(TKT): count guest tickets matching the holder's email/phone once tickets exist.
-  guestTicketsToMerge: 0,
+  guestTicketsToMerge: await countGuestTickets(user),
 });
 
 const startVerification = async (user: UserDocument) => {
@@ -228,33 +232,38 @@ export const verify = async (verificationId: string, code: string) => {
       attemptsLeft: CODE_ATTEMPTS - verification.attempts,
     });
   }
-  const consumed = await VerificationCodeModel.findOneAndDelete({
-    verificationId,
-    codeHash: verification.codeHash,
-    expiresAt: { $gt: new Date() },
-  });
-  if (!consumed) {
-    throw expiredCode();
-  }
-  const user = await UserModel.findOneAndUpdate(
-    { _id: verification.userId, status: { $in: ["unverified", "active"] } },
-    {
-      $set: {
-        status: "active",
-        [verification.channel === "email" ? "emailVerified" : "phoneVerified"]:
-          true,
+  return transaction(async (session) => {
+    const consumed = await VerificationCodeModel.findOneAndDelete({
+      verificationId,
+      codeHash: verification.codeHash,
+      expiresAt: { $gt: new Date() },
+    }).session(session);
+    if (!consumed) {
+      throw expiredCode();
+    }
+    const user = await UserModel.findOneAndUpdate(
+      { _id: verification.userId, status: { $in: ["unverified", "active"] } },
+      {
+        $set: {
+          status: "active",
+          [verification.channel === "email"
+            ? "emailVerified"
+            : "phoneVerified"]: true,
+        },
       },
-    },
-    { new: true, runValidators: true },
-  ).select("+sessionVersion");
-  if (!user) {
-    throw expiredCode();
-  }
-  // TODO(TKT): link guest tickets/history by holder email/phone after verification.
-  return {
-    data: { user: toUserResponse(user), mergedTickets: 0 },
-    session: createSession(user),
-  };
+      { new: true, runValidators: true },
+    )
+      .select("+sessionVersion")
+      .session(session);
+    if (!user) {
+      throw expiredCode();
+    }
+    const mergedTickets = await mergeGuestTickets(user, session);
+    return {
+      data: { user: toUserResponse(user), mergedTickets },
+      session: createSession(user),
+    };
+  });
 };
 
 export const login = async (

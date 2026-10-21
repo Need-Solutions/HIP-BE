@@ -7,12 +7,19 @@ import {
 } from "../middleware/auth.middleware";
 import { validate } from "../../../shared/middleware/validate.middleware";
 import { emptySchema } from "../../users/validators/auth.validator";
+import { acceptInvite } from "../controllers/staff.controller";
+import { acceptInviteSchema } from "../validators/staff.validator";
 
 const AdminAuthRoute = Router();
 AdminAuthRoute.use((req, res, next) => {
   res.set("Cache-Control", "no-store");
   next();
 });
+AdminAuthRoute.post(
+  "/invites/accept",
+  validate(acceptInviteSchema),
+  acceptInvite,
+);
 AdminAuthRoute.post(
   "/login",
   validate(schema.staffLoginSchema),

@@ -113,7 +113,11 @@ export const enable = async (sessionAdmin: AdminDocument, code: string) => {
       setupExpiresAt: { $gt: new Date() },
     },
     {
-      $set: { twoStepEnabled: true },
+      $set: {
+        twoStepEnabled: true,
+        twoStepEnabledAt: new Date(),
+        lastActiveAt: new Date(),
+      },
       $inc: { sessionVersion: 1 },
       $unset: { setupExpiresAt: 1, setupAttempts: 1 },
     },

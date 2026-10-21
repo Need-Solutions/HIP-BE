@@ -1,5 +1,5 @@
 import { randomUUID, timingSafeEqual } from "crypto";
-import { mongo } from "mongoose";
+import { mongo, type ClientSession } from "mongoose";
 import { ContactChangeModel } from "../../../database/models/contact-change.schema";
 import {
   UserModel,
@@ -10,6 +10,8 @@ import {
 import { VerificationCodeModel } from "../../../database/models/verification-code.schema";
 import { PasswordResetModel } from "../../../database/models/password-reset.schema";
 import { AppError } from "../../../shared/errors/app.error";
+import { transaction } from "../../../shared/database/transaction";
+import { mergeGuestTickets } from "../../tickets/services/ticket-linking.service";
 import type {
   ProfileUpdate,
   NotificationUpdate,
@@ -57,12 +59,14 @@ const notifications = (user: UserDocument) => ({
   promotions: user.notifications?.promotions ?? false,
 });
 
-const toProfile = async (user: UserDocument) => {
+const toProfile = async (user: UserDocument, session?: ClientSession) => {
   const pending = await ContactChangeModel.find({
     userId: user._id,
     expiresAt: { $gt: new Date() },
     attempts: { $lt: CODE_ATTEMPTS },
-  }).sort({ createdAt: 1 });
+  })
+    .sort({ createdAt: 1 })
+    .session(session ?? null);
   return {
     user: toUserResponse(user),
     ...(user.dateOfBirth ? { dateOfBirth: user.dateOfBirth } : {}),
@@ -228,48 +232,59 @@ export const confirmContact = async (
   await assertAvailable(pending.field, pending.value, userId);
   if (pending.field === "phone")
     assertEmergencyPhone(user.emergencyContact?.phone, pending.value);
-  const consumed = await ContactChangeModel.findOneAndDelete({
-    _id: pending._id,
-    userId,
-    verificationId,
-    codeHash: pending.codeHash,
-    expiresAt: { $gt: new Date() },
-  });
-  if (!consumed) throw expired();
-  if (pending.field === "email") {
-    // Proof of the new email takes precedence over an unfinished signup occupying it.
-    const unfinished = await UserModel.findOneAndDelete({
-      _id: { $ne: userId },
-      email: pending.value,
-      status: "unverified",
-    });
-    if (unfinished)
-      await Promise.all([
-        VerificationCodeModel.deleteMany({ userId: unfinished._id }),
-        PasswordResetModel.deleteMany({ userId: unfinished._id }),
-      ]);
-  }
-  try {
-    const updated = await UserModel.findOneAndUpdate(
-      { _id: userId, status: "active", roles: "hiker" },
-      {
-        $set: {
-          [pending.field]: pending.value,
-          [pending.field === "email" ? "emailVerified" : "phoneVerified"]: true,
+  return transaction(async (session) => {
+    const consumed = await ContactChangeModel.findOneAndDelete({
+      _id: pending._id,
+      userId,
+      verificationId,
+      codeHash: pending.codeHash,
+      expiresAt: { $gt: new Date() },
+    }).session(session);
+    if (!consumed) throw expired();
+    if (pending.field === "email") {
+      // Proof of the new email takes precedence over an unfinished signup occupying it.
+      const unfinished = await UserModel.findOneAndDelete({
+        _id: { $ne: userId },
+        email: pending.value,
+        status: "unverified",
+      }).session(session);
+      if (unfinished) {
+        await VerificationCodeModel.deleteMany({
+          userId: unfinished._id,
+        }).session(session);
+        await PasswordResetModel.deleteMany({ userId: unfinished._id }).session(
+          session,
+        );
+      }
+    }
+    try {
+      const updated = await UserModel.findOneAndUpdate(
+        { _id: userId, status: "active", roles: "hiker" },
+        {
+          $set: {
+            [pending.field]: pending.value,
+            [pending.field === "email" ? "emailVerified" : "phoneVerified"]:
+              true,
+          },
         },
-      },
-      { new: true, runValidators: true },
-    );
-    if (!updated)
-      throw new AppError(401, "unauthenticated", "Please log in to continue.");
-    if (pending.field === "email")
-      await PasswordResetModel.deleteMany({ userId });
-    return toProfile(updated);
-  } catch (error) {
-    if (error instanceof mongo.MongoServerError && error.code === 11000)
-      throw contactTaken(pending.field);
-    throw error;
-  }
+        { new: true, runValidators: true, session },
+      );
+      if (!updated)
+        throw new AppError(
+          401,
+          "unauthenticated",
+          "Please log in to continue.",
+        );
+      if (pending.field === "email")
+        await PasswordResetModel.deleteMany({ userId }).session(session);
+      await mergeGuestTickets(updated, session);
+      return toProfile(updated, session);
+    } catch (error) {
+      if (error instanceof mongo.MongoServerError && error.code === 11000)
+        throw contactTaken(pending.field);
+      throw error;
+    }
+  });
 };
 
 export const resendContactCode = async (

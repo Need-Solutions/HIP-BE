@@ -27,6 +27,8 @@ export default defineConfig({
       SMTP_USER: "",
       SMTP_PASS: "",
       MAIL_FROM: "hip@example.com",
+      // Synthetic per-run value: tests must never call Paystack with a developer's actual key.
+      PAYSTACK_SECRET_KEY: `sk_test_${randomBytes(24).toString("hex")}`,
     },
   },
 });

@@ -8,6 +8,8 @@ import { LoginAttemptModel } from "../database/models/login-attempt.schema";
 import { ContactChangeModel } from "../database/models/contact-change.schema";
 import { AdminModel } from "../database/models/admin.schema";
 import { StaffChallengeModel } from "../database/models/staff-challenge.schema";
+import { StaffInviteModel } from "../database/models/staff-invite.schema";
+import { AuditLogModel } from "../database/models/audit-log.schema";
 
 const handleDBConnect = async () => {
   try {
@@ -22,6 +24,8 @@ const handleDBConnect = async () => {
       ContactChangeModel.init(),
       AdminModel.init(),
       StaffChallengeModel.init(),
+      StaffInviteModel.init(),
+      AuditLogModel.init(),
     ]);
     logger.general.info("connected to database successfully.");
   } catch (err) {

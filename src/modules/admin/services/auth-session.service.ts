@@ -63,6 +63,17 @@ export const readStaffSession = async (token: string) => {
     (payload.scope === "full") !== admin.twoStepEnabled
   )
     return null;
+  const now = new Date();
+  if (
+    !admin.lastActiveAt ||
+    now.getTime() - admin.lastActiveAt.getTime() >= 60000
+  ) {
+    await AdminModel.updateOne(
+      { _id: admin._id, status: "active", sessionVersion: payload.version },
+      { $set: { lastActiveAt: now } },
+    );
+    admin.lastActiveAt = now;
+  }
   return { admin, scope: payload.scope as StaffScope };
 };
 

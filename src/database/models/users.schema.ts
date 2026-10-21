@@ -25,6 +25,7 @@ export interface IUser {
   emailVerified: boolean;
   phoneVerified: boolean;
   sessionVersion: number;
+  ticketChanges: number;
   dateOfBirth?: string;
   emergencyContact?: { name: string; phone: string };
   notifications: NotificationPrefs;
@@ -75,6 +76,7 @@ const UserSchema = new Schema<IUser>(
     emailVerified: { type: Boolean, default: false },
     phoneVerified: { type: Boolean, default: false },
     sessionVersion: { type: Number, default: 0, select: false },
+    ticketChanges: { type: Number, default: 0, select: false },
     dateOfBirth: String,
     emergencyContact: { type: emergencyContactSchema, default: undefined },
     notifications: {

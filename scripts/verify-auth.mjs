@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomBytes, randomInt } from "node:crypto";
+import { createCipheriv, randomBytes, randomInt } from "node:crypto";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
@@ -11,7 +11,11 @@ import { fileURLToPath } from "node:url";
 import { cases } from "./postman/auth.mjs";
 import { cases as profileCases } from "./postman/profile.mjs";
 import { cases as staffCases } from "./postman/admin-auth.mjs";
-import { generate } from "otplib";
+import {
+  cases as managementCases,
+  variables as managementDefaults,
+} from "./postman/staff.mjs";
+import { generate, generateSecret } from "otplib";
 import mongoose from "mongoose";
 import bcrypt from "bcrypt";
 import { runInNewContext } from "node:vm";
@@ -19,6 +23,12 @@ import { runInNewContext } from "node:vm";
 // All data, credentials, mail and processes belong to this temporary test run.
 const root = fileURLToPath(new URL("../", import.meta.url));
 const staffOnly = process.argv.includes("--staff-only");
+const managementOnly = process.argv.includes("--staff-management-only");
+const selectedCases = managementOnly
+  ? managementCases
+  : staffOnly
+    ? staffCases
+    : [...cases, ...profileCases, ...staffCases, ...managementCases];
 const option = process.argv.indexOf("--mongod");
 const mongodBinary = option >= 0 ? process.argv[option + 1] : "mongod";
 const children = [];
@@ -132,6 +142,8 @@ async function main() {
       String(mongoPort),
       "--bind_ip",
       "127.0.0.1",
+      "--replSet",
+      "hip-test-rs",
       "--quiet",
       "--logpath",
       path.join(temporary, "mongo.log"),
@@ -139,13 +151,23 @@ async function main() {
     process.env,
   );
   await waitForPort(mongoPort, mongo);
+  // Controller 4 changes and their audit entries use real MongoDB transactions.
+  const directUri = `mongodb://127.0.0.1:${mongoPort}/?directConnection=true`;
+  await mongoose.connect(directUri);
+  await mongoose.connection.db.admin().command({
+    replSetInitiate: {
+      _id: "hip-test-rs",
+      members: [{ _id: 0, host: `127.0.0.1:${mongoPort}` }],
+    },
+  });
+  await mongoose.disconnect();
   const smtpPort = await startSmtp();
   const apiPort = await freePort();
   const env = {
     ...process.env,
     NODE_ENV: "development",
     PORT: String(apiPort),
-    MONGODB_URI: `mongodb://127.0.0.1:${mongoPort}/hip_auth_test_${randomBytes(6).toString("hex")}`,
+    MONGODB_URI: `mongodb://127.0.0.1:${mongoPort}/hip_auth_test_${randomBytes(6).toString("hex")}?replicaSet=hip-test-rs`,
     CLIENT_URL: "http://localhost:5173",
     JWT_SECRET: randomBytes(48).toString("hex"),
     ENCRYPTION_KEY: randomBytes(32).toString("hex"),
@@ -166,7 +188,11 @@ async function main() {
       [
         "node_modules/vitest/vitest.mjs",
         "run",
-        ...(staffOnly ? ["src/__tests__/admin-auth.test.ts"] : []),
+        ...(managementOnly
+          ? ["src/__tests__/staff.test.ts"]
+          : staffOnly
+            ? ["src/__tests__/admin-auth.test.ts"]
+            : []),
         "--maxWorkers=1",
         "--minWorkers=1",
       ],
@@ -182,10 +208,11 @@ async function main() {
     "The built server must start.",
   );
   console.log(
-    `Built server started. Running ${staffOnly ? staffCases.length : cases.length + profileCases.length + staffCases.length} HTTP scenarios and generated Postman assertions.`,
+    `Built server started. Running ${selectedCases.length} HTTP scenarios and generated Postman assertions.`,
   );
   const unique = randomBytes(6).toString("hex");
   const variables = {
+    ...managementDefaults,
     email: `ada-${unique}@example.com`,
     otherEmail: `unknown-${unique}@example.com`,
     phone: `+234803${randomInt(1000000, 10000000)}`,
@@ -208,8 +235,45 @@ async function main() {
     deactivatedStaffEmail: `deactivated-${unique}@example.com`,
     deactivatedStaffPassword: `${randomBytes(18).toString("base64url")}5!`,
     unknownStaffEmail: `unknown-staff-${unique}@example.com`,
+    staffSetupKey: "",
+    inviteAdminEmail: `admin-invite-${unique}@example.com`,
+    inviteAdminPassword: `${randomBytes(18).toString("base64url")}6!`,
+    inviteCheckinEmail: `checkin-invite-${unique}@example.com`,
+    inviteCheckinPassword: `${randomBytes(18).toString("base64url")}7!`,
+    expiredInviteEmail: `expired-invite-${unique}@example.com`,
+    expiredInvitePassword: `${randomBytes(18).toString("base64url")}8!`,
   };
   await mongoose.connect(env.MONGODB_URI);
+  if (managementOnly) {
+    // A temporary already-enrolled manager; no dependency on a real authenticator or account.
+    variables.staffSetupKey = generateSecret();
+    const iv = randomBytes(12);
+    const cipher = createCipheriv(
+      "aes-256-gcm",
+      Buffer.from(env.ENCRYPTION_KEY, "hex"),
+      iv,
+    );
+    cipher.setAAD(Buffer.from("hip:staff:authenticator:v1"));
+    const encrypted = Buffer.concat([
+      cipher.update(variables.staffSetupKey, "utf8"),
+      cipher.final(),
+    ]);
+    await mongoose.connection.collection("admins").updateOne(
+      { email: env.SUPER_ADMIN_EMAIL },
+      {
+        $set: {
+          twoStepEnabled: true,
+          twoStepEnabledAt: new Date(),
+          authenticatorSecret: [
+            "v1",
+            iv.toString("hex"),
+            cipher.getAuthTag().toString("hex"),
+            encrypted.toString("hex"),
+          ].join(":"),
+        },
+      },
+    );
+  }
   await mongoose.connection.collection("admins").insertOne({
     fullName: "Deactivated Staff",
     email: variables.deactivatedStaffEmail,
@@ -256,10 +320,16 @@ async function main() {
       .map((item) => [item.name, item]),
   );
   const cookies = new Map();
-  for (const test of staffOnly
-    ? staffCases
-    : [...cases, ...profileCases, ...staffCases]) {
-    if (!staffOnly && test === staffCases[0]) {
+  for (const test of selectedCases) {
+    if (test === managementCases[0] && !managementOnly) {
+      await mongoose.connect(env.MONGODB_URI);
+      await mongoose.connection.collection("loginattempts").deleteMany({});
+      await mongoose.disconnect();
+    }
+    if (
+      (!staffOnly && !managementOnly && test === staffCases[0]) ||
+      (!managementOnly && test === managementCases[0])
+    ) {
       // Each controller folder gets a fresh process-wide IP rate-limit window.
       await stop(api);
       api = child(process.execPath, ["dist/index.js"], env);
@@ -269,6 +339,22 @@ async function main() {
       variables.staffAuthenticatorCode = await generate({
         secret: variables.staffSetupKey,
       });
+    if (test.prepareTotpFor)
+      variables[`${test.prepareTotpFor}AuthenticatorCode`] = await generate({
+        secret: variables[`${test.prepareTotpFor}SetupKey`],
+      });
+    if (test.rememberOldToken)
+      variables.oldInviteAdminToken = variables.inviteAdminToken;
+    if (test.expireInviteBefore) {
+      await mongoose.connect(env.MONGODB_URI);
+      await mongoose.connection
+        .collection("staffinvites")
+        .updateOne(
+          { inviteId: variables.expiredInviteId },
+          { $set: { expiresAt: new Date(0) } },
+        );
+      await mongoose.disconnect();
+    }
     if (test.prepareWrongTotp) {
       const epoch = Math.floor(Date.now() / 1000);
       const codes = await Promise.all(
@@ -305,7 +391,13 @@ async function main() {
         method: test.method,
         headers: {
           "Content-Type": "application/json",
-          ...(cookies.size ? { Cookie: [...cookies.values()].join("; ") } : {}),
+          ...(test.staffManagement
+            ? test.cookieVar
+              ? { Cookie: variables[test.cookieVar] }
+              : {}
+            : cookies.size
+              ? { Cookie: [...cookies.values()].join("; ") }
+              : {}),
         },
         ...(test.body ? { body: JSON.stringify(replace(test.body)) } : {}),
       },
@@ -335,6 +427,12 @@ async function main() {
       visualizer: { set: () => undefined },
       response: {
         code: response.status,
+        headers: {
+          all: () =>
+            response.headers
+              .getSetCookie()
+              .map((value) => ({ key: "set-cookie", value })),
+        },
         json: () => body,
         text: () => (response.status === 204 ? "" : JSON.stringify(body)),
       },
@@ -348,7 +446,14 @@ async function main() {
           variables[key] = value;
         },
       },
+      environment: {
+        get: (key) => variables[key],
+        set: (key, value) => {
+          variables[key] = value;
+        },
+      },
       variables: {
+        get: (key) => variables[key],
         replaceIn: (value) =>
           value.replace(/\{\{(\w+)\}\}/g, (_, key) => variables[key]),
       },
@@ -368,6 +473,15 @@ async function main() {
         "Reset link must arrive by SMTP.",
       );
     }
+    if (test.captureInviteTokenAs) {
+      variables[test.captureInviteTokenAs] = messages
+        .at(-1)
+        ?.match(/staff\/invite\?token=([a-f0-9]{64})/)?.[1];
+      assert.ok(
+        Boolean(variables[test.captureInviteTokenAs]),
+        "An invite link must arrive by SMTP.",
+      );
+    }
     console.log(`PASS ${test.name}`);
   }
   await stop(api);
@@ -381,7 +495,7 @@ async function main() {
   delete productionEnv.DEV_FIXED_CODE;
   const production = child(process.execPath, ["dist/index.js"], productionEnv);
   await waitForPort(apiPort, production);
-  if (!staffOnly) {
+  if (!staffOnly && !managementOnly) {
     const response = await fetch(`${baseUrl}/api/auth/user-login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

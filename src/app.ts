@@ -7,7 +7,16 @@ import { ENV } from "./config/env";
 
 export const app = express();
 
-app.use(express.json());
+// Paystack signs exact bytes. Capture them before JSON parsing, including whitespace.
+app.use(
+  "/api/webhooks/paystack",
+  express.raw({ type: "application/json", limit: "100kb" }),
+);
+app.use((req, res, next) =>
+  req.path === "/api/webhooks/paystack"
+    ? next()
+    : express.json()(req, res, next),
+);
 app.use(cookieParser());
 
 // Handle Important Configs

@@ -15,6 +15,9 @@ export interface IAdmin {
   status: "active" | "deactivated";
   authenticatorSecret?: string;
   twoStepEnabled: boolean;
+  twoStepEnabledAt?: Date;
+  lastActiveAt?: Date;
+  staffChanges: number;
   sessionVersion: number;
   setupExpiresAt?: Date;
   setupAttempts: number;
@@ -41,6 +44,9 @@ const AdminSchema = new Schema<IAdmin>(
     },
     authenticatorSecret: { type: String, select: false },
     twoStepEnabled: { type: Boolean, default: false },
+    twoStepEnabledAt: Date,
+    lastActiveAt: Date,
+    staffChanges: { type: Number, default: 0, select: false },
     sessionVersion: { type: Number, default: 0, select: false },
     setupExpiresAt: { type: Date, select: false },
     setupAttempts: { type: Number, default: 0, select: false },

@@ -9,6 +9,7 @@ import {
   notificationSchema,
 } from "../validators/profile.validator";
 import { validate } from "../../../shared/middleware/validate.middleware";
+import { mine } from "../../tickets/controllers/ticket.controller";
 
 const UserRoute = Router();
 
@@ -17,6 +18,7 @@ UserRoute.use((req, res, next) => {
   next();
 });
 UserRoute.use(authMiddleware, requireHiker);
+UserRoute.get("/tickets", mine);
 UserRoute.get("/profile", controller.getProfile);
 UserRoute.patch(
   "/profile",

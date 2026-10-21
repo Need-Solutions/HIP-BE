@@ -37,6 +37,35 @@ export const envSchema = z
       .string()
       .min(32, "JWT_SECRET must contain at least 32 characters."),
     SMTP_HOST: z.string().trim().min(1),
+    PAYSTACK_SECRET_KEY: optionalSetting(
+      z
+        .string()
+        .trim()
+        .regex(/^sk_(?:test|live)_[A-Za-z0-9]+$/, "Use a Paystack secret key."),
+    ),
+    PLATFORM_FEE_PERCENT: optionalSetting(
+      z.coerce
+        .number()
+        .gt(0)
+        .max(100)
+        .refine(
+          (value) => Number.isInteger(Number((value * 100).toFixed(8))),
+          "Use at most two decimal places.",
+        ),
+    ),
+    PLATFORM_FEE_MODE: z
+      .enum(["added_to_buyer", "deducted_from_group"])
+      .default("added_to_buyer"),
+    PLATFORM_FEE_ON_REFUND: z.enum(["refund", "keep"]).default("refund"),
+    PAYSTACK_FEE_BEARER: z.enum(["hiker", "group"]).default("hiker"),
+    CLOUDINARY_CLOUD_NAME: optionalSetting(
+      z
+        .string()
+        .trim()
+        .regex(/^[a-zA-Z0-9_-]+$/),
+    ),
+    CLOUDINARY_API_KEY: optionalSetting(z.string().trim().regex(/^\d+$/)),
+    CLOUDINARY_API_SECRET: optionalSetting(z.string().trim().min(1)),
     ENCRYPTION_KEY: z
       .string()
       .regex(
@@ -77,6 +106,19 @@ export const envSchema = z
       .optional(),
   })
   .superRefine((env, ctx) => {
+    const cloudinary = [
+      env.CLOUDINARY_CLOUD_NAME,
+      env.CLOUDINARY_API_KEY,
+      env.CLOUDINARY_API_SECRET,
+    ];
+    if (cloudinary.some(Boolean) && !cloudinary.every(Boolean)) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["CLOUDINARY_CLOUD_NAME"],
+        message:
+          "Set all three CLOUDINARY settings together, or leave all empty to disable cover uploads.",
+      });
+    }
     const seedFields = [
       env.SUPER_ADMIN_EMAIL,
       env.SUPER_ADMIN_NAME,

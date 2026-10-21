@@ -11,3 +11,16 @@
 .env.*
 !.env.example
 .DS_Store
+
+# Private local/test inputs and browser authentication artifacts
+paystack-test-bank.json
+**/paystack-test-bank.json
+*credentials*.json
+*.private.json
+*.local.json
+.auth/
+playwright/.auth/
+*.har
+*.pem
+*.key
+test-results*/
