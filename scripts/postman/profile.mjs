@@ -12,6 +12,7 @@ const user = (prefix, fullName) => ({
   status: "active",
   emailVerified: true,
   phoneVerified: false,
+  photoUrl: null,
   createdAt: `{{${prefix}CreatedAt}}`,
 });
 const main = user("profile", "Ada Profile");

@@ -21,12 +21,14 @@ export interface IUser {
   phone: string;
   passwordHash: string;
   roles: Role[];
-  status: "active" | "unverified" | "suspended" | "deactivated";
+  status: "active" | "unverified" | "suspended" | "deactivated" | "deleted";
   emailVerified: boolean;
   phoneVerified: boolean;
   sessionVersion: number;
   ticketChanges: number;
   dateOfBirth?: string;
+  photoUrl?: string;
+  photoPublicId?: string;
   emergencyContact?: { name: string; phone: string };
   notifications: NotificationPrefs;
   createdAt: Date;
@@ -60,17 +62,29 @@ const UserSchema = new Schema<IUser>(
     fullName: { type: String, required: true, trim: true },
     email: {
       type: String,
-      required: true,
+      required: function () {
+        return this.status !== "deleted";
+      },
       lowercase: true,
       trim: true,
-      unique: true,
     },
-    phone: { type: String, required: true },
-    passwordHash: { type: String, required: true, select: false },
+    phone: {
+      type: String,
+      required: function () {
+        return this.status !== "deleted";
+      },
+    },
+    passwordHash: {
+      type: String,
+      required: function () {
+        return this.status !== "deleted";
+      },
+      select: false,
+    },
     roles: { type: [String], enum: Object.values(Role), default: [Role.HIKER] },
     status: {
       type: String,
-      enum: ["active", "unverified", "suspended", "deactivated"],
+      enum: ["active", "unverified", "suspended", "deactivated", "deleted"],
       default: "unverified",
     },
     emailVerified: { type: Boolean, default: false },
@@ -78,6 +92,8 @@ const UserSchema = new Schema<IUser>(
     sessionVersion: { type: Number, default: 0, select: false },
     ticketChanges: { type: Number, default: 0, select: false },
     dateOfBirth: String,
+    photoUrl: String,
+    photoPublicId: { type: String, select: false },
     emergencyContact: { type: emergencyContactSchema, default: undefined },
     notifications: {
       type: notificationSchema,
@@ -88,6 +104,14 @@ const UserSchema = new Schema<IUser>(
 );
 
 // AUTH-004: unfinished signups may share a phone, verified accounts may not.
+UserSchema.index(
+  { email: 1 },
+  {
+    name: "user_email_unique",
+    unique: true,
+    partialFilterExpression: { email: { $type: "string" } },
+  },
+);
 UserSchema.index(
   { phone: 1 },
   {
@@ -110,5 +134,6 @@ export const toUserResponse = (user: UserDocument) => ({
   status: user.status,
   emailVerified: user.emailVerified,
   phoneVerified: user.phoneVerified,
+  photoUrl: user.photoUrl ?? null,
   createdAt: user.createdAt.toISOString(),
 });

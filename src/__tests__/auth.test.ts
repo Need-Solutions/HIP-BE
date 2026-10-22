@@ -118,6 +118,7 @@ describe("Users auth contract (AUTH-001–AUTH-013)", () => {
       "id",
       "phone",
       "phoneVerified",
+      "photoUrl",
       "roles",
       "status",
     ]);

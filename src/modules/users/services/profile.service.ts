@@ -1,4 +1,5 @@
 import { randomUUID, timingSafeEqual } from "crypto";
+import { CheckInModel } from "../../../database/models/check-in.schema";
 import { mongo, type ClientSession } from "mongoose";
 import { ContactChangeModel } from "../../../database/models/contact-change.schema";
 import {
@@ -78,8 +79,12 @@ const toProfile = async (user: UserDocument, session?: ClientSession) => {
           },
         }
       : {}),
-    // TODO(ATT): count check-ins when the attendance controller exists. Never count ticket sales.
-    hikesAttended: 0,
+    ...(user.photoUrl ? { photoUrl: user.photoUrl } : {}),
+    hikesAttended: (
+      await CheckInModel.distinct("event", { user: user._id }).session(
+        session ?? null,
+      )
+    ).length,
     notifications: notifications(user),
     pendingContacts: pending.map((change) => ({
       verificationId: change.verificationId,

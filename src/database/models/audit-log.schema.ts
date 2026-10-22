@@ -6,7 +6,14 @@ export interface IAuditLog {
   actor: { id: string; name: string; role: AuditRole };
   action: string;
   target: {
-    type: "staff" | "staff_invite" | "event" | "checkout" | "checkout_settings";
+    type:
+      | "staff"
+      | "staff_invite"
+      | "event"
+      | "checkout"
+      | "checkout_settings"
+      | "hiker"
+      | "ticket";
     id: string;
   };
   details: string;
@@ -35,6 +42,8 @@ const AuditLogSchema = new Schema<IAuditLog>(
           "event",
           "checkout",
           "checkout_settings",
+          "hiker",
+          "ticket",
         ],
         required: true,
       },

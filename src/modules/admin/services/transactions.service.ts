@@ -266,7 +266,8 @@ export async function ticketDetail(code: string) {
   ]);
   return {
     code: ticket.code,
-    status: ticket.status,
+    status:
+      ticket.status === "refund_pending" ? "refund_requested" : ticket.status,
     event: {
       id: event._id.toString(),
       title: event.title,

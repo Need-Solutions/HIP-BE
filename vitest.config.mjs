@@ -1,7 +1,11 @@
 import { defineConfig } from "vitest/config";
 import { randomBytes } from "node:crypto";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 export default defineConfig({
+  // Vite's own environment loader must also stay away from the project's .env files.
+  envDir: join(tmpdir(), `hip-test-no-env-${randomBytes(12).toString("hex")}`),
   test: {
     watch: false,
     // These integration files clear collections in the same dedicated database.

@@ -14,7 +14,8 @@
     "test": "vitest run",
     "test:run": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:preview": "npx vite preview --outDir html"
+    "test:preview": "npx vite preview --outDir html",
+    "test:isolated": "node scripts/verify-account.mjs"
   },
   "keywords": [
     "simple",

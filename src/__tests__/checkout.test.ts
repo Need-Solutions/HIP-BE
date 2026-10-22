@@ -874,7 +874,21 @@ describe("Checkout and tickets (TKT-006–TKT-018)", () => {
     const mine = await request(app)
       .get("/api/me/tickets")
       .set("Cookie", cookie);
-    expect(mine.body).toEqual({ tickets: [], pending: [] });
+    expect(mine.body).toEqual({
+      tickets: [],
+      pending: [],
+      page: 1,
+      pageSize: 20,
+      total: 0,
+      totalPages: 0,
+      counts: {
+        upcoming: 0,
+        upcomingBoughtForOthers: 0,
+        past: 0,
+        cancelled: 0,
+        pending: 0,
+      },
+    });
     expect(
       (await request(app).get(`/api/checkout/${item.id}`).set("Cookie", cookie))
         .status,

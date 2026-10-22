@@ -177,6 +177,7 @@ describe("AUTH-016 — profile", () => {
         emailVerified: true,
         phoneVerified: false,
         createdAt: user.createdAt.toISOString(),
+        photoUrl: null,
       },
       hikesAttended: 0,
       notifications: prefs,
@@ -263,16 +264,16 @@ describe("AUTH-016 — profile", () => {
     ).toBe(400);
   });
 
-  it("does not implement photo, export or account deletion", async () => {
+  it("uses Controller 7 photo/export routes while keeping the unused legacy delete path absent", async () => {
     const user = await fixture();
     expect(
       (await request(app).post("/api/me/photo").set("Cookie", cookie(user)))
         .status,
-    ).toBe(404);
+    ).toBe(400);
     expect(
       (await request(app).get("/api/me/export").set("Cookie", cookie(user)))
         .status,
-    ).toBe(404);
+    ).toBe(200);
     expect(
       (
         await request(app)

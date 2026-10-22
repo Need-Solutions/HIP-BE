@@ -25,6 +25,7 @@ const user = {
   status: "active",
   emailVerified: true,
   phoneVerified: false,
+  photoUrl: null,
   createdAt: "{{createdAt}}",
 };
 const invalidCredentials = (attemptsLeft) =>

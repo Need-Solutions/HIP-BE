@@ -131,3 +131,39 @@ export function orderTotals(subtotalKobo: number) {
     );
   return { subtotalKobo, feeKobo, amountKobo: subtotalKobo + feeKobo };
 }
+
+/** A ticket's frozen policy, never today's settings. Processing fees are not refunded. */
+export function ticketRefundAmounts(
+  priceKobo: number,
+  percent: 100 | 50,
+  frozen?: FeeBreakdown,
+) {
+  const rounded = (amount: number, numerator: number, denominator: number) =>
+    Number(
+      (BigInt(amount) * BigInt(numerator) + BigInt(denominator / 2)) /
+        BigInt(denominator),
+    );
+  const platformFeeKobo = frozen
+    ? rounded(priceKobo, Math.round(frozen.platformFeePercent * 100), 10000)
+    : 0;
+  const platformFeeMode = frozen?.platformFeeMode ?? "added_to_buyer";
+  const platformFeeOnRefund = frozen?.platformFeeOnRefund ?? "refund";
+  const ticketRefundKobo = rounded(priceKobo, percent, 100);
+  const platformPortion = rounded(platformFeeKobo, percent, 100);
+  const platformFeeRefundedKobo =
+    platformFeeOnRefund === "refund" ? platformPortion : 0;
+  const totalRefundKobo =
+    ticketRefundKobo +
+    platformFeeRefundedKobo -
+    (platformFeeMode === "deducted_from_group" ? platformPortion : 0);
+  return {
+    ticketSubtotalKobo: priceKobo,
+    ticketRefundKobo,
+    platformFeeKobo,
+    platformFeeRefundedKobo,
+    paystackFeeRefundedKobo: 0,
+    totalRefundKobo,
+    platformFeeMode,
+    platformFeeOnRefund,
+  };
+}

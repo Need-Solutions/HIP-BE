@@ -1,6 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { cases, variables } from "./auth.mjs";
 import {
+  cases as accountCases,
+  variables as accountVariables,
+} from "./account.mjs";
+import {
   cases as profileCases,
   variables as profileVariables,
 } from "./profile.mjs";
@@ -82,6 +86,7 @@ function testsFor(test) {
     lines.push(
       `pm.visualizer.set(${JSON.stringify('<h3>Paystack test payment</h3><p>First send the pending-status request. Then open this payment link in your browser and pay before the hold expires.</p><a href="https://checkout.paystack.com/{{accessCode}}" target="_blank" rel="noreferrer">Open Paystack test checkout</a><p>Test card: 4084 0840 8408 4081, CVV 408, any future expiry (for example 12/30). After payment send the verified-status request. Never put a secret key in Postman.</p>')}, { accessCode: body.paystackAccessCode });`,
     );
+  if (test.accountAssertions) return [...lines, ...test.accountAssertions];
   if (test.checkoutAssertions) return [...lines, ...test.checkoutAssertions];
   if (test.eventAssertions) return [...lines, ...test.eventAssertions];
   if (test.overviewAssertions) return [...lines, ...test.overviewAssertions];
@@ -209,23 +214,25 @@ function buildItem(test) {
           },
         }
       : {}),
-    description: test.transactionsController
-      ? "PAY-*, ANA-028, TKT-020. Read-only payments from stored orders, one row per order. Full super-admin/admin session required. Dates are inclusive Lagos calendar dates; CSV uses all=true. Refund writes are not built. Test net revenue is virtual and never bank settlement. Keep cookies private."
-      : test.auditController
-        ? "ADM-014, NFR-012. Super-admin-only read access to the same immutable entries as Overview. Filters: q, action or group, actorId, inclusive Africa/Lagos from/to dates, page; all=true for the existing CSV export. Reuses private Overview test cookies. There is no edit/delete endpoint. No populated cookies or secrets belong in exports."
-        : test.overviewController
-          ? "ANA-001–ANA-004. Read-only real Overview. Use private full-session managerCookie and overviewAdminCookie; other cookies exercise permission/setup errors. Never export populated cookies. Registered hikers exclude unfinished signups and guests; sales use verified paid orders and issued tickets, grouped by payment time in Africa/Lagos weeks. Net excludes the buyer-paid processing fee. No check-in/refund ledger exists yet, so attendance and pending refunds remain zero. Examples are illustrative; assertions accept the database's current totals."
-          : test.checkoutController
-            ? "TKT-006–TKT-018. Prepare Controller 5 published fixtures: free Community ticket (0 kobo), capacity/limit 1; paid Standard ticket (250000 kobo), capacity/limit 2. Use a disposable inbox, a valid phone and a different emergency phone. Configure the illustrative 5% fee and group settlement before the paid cases; run the displayed setup requests after F10. Use checkoutManagerCookie/checkoutAdminCookie from staff login, and private settlementBankCode/settlementAccountNumber/settlementAccountName. Paystack must be in test mode. The new /api/admin/checkout/settings endpoints are super-admin only. Cookies, bank details, guest tokens and access codes belong in a private environment. No Paystack secret key is ever used by Postman. F07 needs the recovery-email token. Complete the hosted payment with the official Paystack test card before F14; F22 needs the pending hold to expire after ten minutes. The isolated verifier advances only its private test fixtures. No refunds/history/check-in endpoints are built here."
-            : test.eventsController
-              ? "EVT-001–EVT-012, WEB-006/011, SRCH-007. Use an enrolled super admin and private environment for staffEmail/staffPassword/staffAuthenticatorCode and managerCookie. Fill eventNonAdminCookie with a full check-in staff or advertiser cookie. Select a JPG/PNG/WebP <=5 MB for coverFile, a text file for coverWrongFile, and an image >5 MB for coverLargeFile. Dates use Africa/Lagos; responses are UTC. Ticket holds and checkout are in Controller 6; refunds and ticket-holder notifications remain unbuilt. No user data is created by public reads. Never export populated credentials/cookies."
-              : test.staffManagement
-                ? "ADM-001–ADM-008. Use a dedicated replica-set database and disposable inboxes. An enrolled super admin is required. Select a private Postman environment: scripts keep separate manager/admin/check-in cookies there, and each request disables the shared cookie jar. Fill invite tokens from email before acceptance; resending invalidates the previous link. Scan each setup QR in Visualize and enter a fresh app code. The expired-invite case requires an already expired disposable link (the local verifier prepares it without a public expiry endpoint). Never export populated passwords, cookies, tokens or setup keys."
-                : test.name.startsWith("C")
-                  ? "ADM-001. Start with a new, un-enrolled super admin from SUPER_ADMIN_* in a dedicated development server. Fill staffEmail/staffName/staffPassword privately. C08 Visualize displays the QR; scan it or enter setupKey in a time-based authenticator. Enter a fresh app code in staffAuthenticatorCode for C10/C19/C20. C22 needs the active hiker from Controller 2; C24 needs a deactivated staff fixture in the test database (staff creation comes in Controller 4). This folder enrolls the admin and ends with a 15-minute lock; do not rerun against an already enrolled real account. Never export populated secrets or codes."
-                  : test.captureReset
-                    ? "Copy the token from the reset email into resetToken before sending request 30. Do not share an exported environment containing credentials or tokens."
-                    : "Users auth/profile. Use disposable accounts and the cookie jar. For automated runs only, set DEV_FIXED_CODE=123456 in a dedicated development server; regular development uses random email codes.",
+    description: test.accountController
+      ? "Controller 7. Requires a private hiker cookie. Prepare paid future/past, free, checked-in and foreign tickets in a dedicated test database. Refund requests do not call Paystack or release capacity. Export at most three times per hour. Deletion anonymises a disposable hiker only; capture the old recipient before clearing it and send confirmation from the transactional encrypted outbox after commit. Never export populated cookies/passwords."
+      : test.transactionsController
+        ? "PAY-*, ANA-028, TKT-020. Read-only payments from stored orders, one row per order. Full super-admin/admin session required. Dates are inclusive Lagos calendar dates; CSV uses all=true. Refund writes are not built. Test net revenue is virtual and never bank settlement. Keep cookies private."
+        : test.auditController
+          ? "ADM-014, NFR-012. Super-admin-only read access to the same immutable entries as Overview. Filters: q, action or group, actorId, inclusive Africa/Lagos from/to dates, page; all=true for the existing CSV export. Reuses private Overview test cookies. There is no edit/delete endpoint. No populated cookies or secrets belong in exports."
+          : test.overviewController
+            ? "ANA-001–ANA-004. Read-only real Overview. Use private full-session managerCookie and overviewAdminCookie; other cookies exercise permission/setup errors. Never export populated cookies. Registered hikers exclude unfinished signups and guests; sales use verified paid orders and issued tickets, grouped by payment time in Africa/Lagos weeks. Net excludes the buyer-paid processing fee. No check-in/refund ledger exists yet, so attendance and pending refunds remain zero. Examples are illustrative; assertions accept the database's current totals."
+            : test.checkoutController
+              ? "TKT-006–TKT-018. Prepare Controller 5 published fixtures: free Community ticket (0 kobo), capacity/limit 1; paid Standard ticket (250000 kobo), capacity/limit 2. Use a disposable inbox, a valid phone and a different emergency phone. Configure the illustrative 5% fee and group settlement before the paid cases; run the displayed setup requests after F10. Use checkoutManagerCookie/checkoutAdminCookie from staff login, and private settlementBankCode/settlementAccountNumber/settlementAccountName. Paystack must be in test mode. The new /api/admin/checkout/settings endpoints are super-admin only. Cookies, bank details, guest tokens and access codes belong in a private environment. No Paystack secret key is ever used by Postman. F07 needs the recovery-email token. Complete the hosted payment with the official Paystack test card before F14; F22 needs the pending hold to expire after ten minutes. The isolated verifier advances only its private test fixtures. No refunds/history/check-in endpoints are built here."
+              : test.eventsController
+                ? "EVT-001–EVT-012, WEB-006/011, SRCH-007. Use an enrolled super admin and private environment for staffEmail/staffPassword/staffAuthenticatorCode and managerCookie. Fill eventNonAdminCookie with a full check-in staff or advertiser cookie. Select a JPG/PNG/WebP <=5 MB for coverFile, a text file for coverWrongFile, and an image >5 MB for coverLargeFile. Dates use Africa/Lagos; responses are UTC. Ticket holds and checkout are in Controller 6; refunds and ticket-holder notifications remain unbuilt. No user data is created by public reads. Never export populated credentials/cookies."
+                : test.staffManagement
+                  ? "ADM-001–ADM-008. Use a dedicated replica-set database and disposable inboxes. An enrolled super admin is required. Select a private Postman environment: scripts keep separate manager/admin/check-in cookies there, and each request disables the shared cookie jar. Fill invite tokens from email before acceptance; resending invalidates the previous link. Scan each setup QR in Visualize and enter a fresh app code. The expired-invite case requires an already expired disposable link (the local verifier prepares it without a public expiry endpoint). Never export populated passwords, cookies, tokens or setup keys."
+                  : test.name.startsWith("C")
+                    ? "ADM-001. Start with a new, un-enrolled super admin from SUPER_ADMIN_* in a dedicated development server. Fill staffEmail/staffName/staffPassword privately. C08 Visualize displays the QR; scan it or enter setupKey in a time-based authenticator. Enter a fresh app code in staffAuthenticatorCode for C10/C19/C20. C22 needs the active hiker from Controller 2; C24 needs a deactivated staff fixture in the test database (staff creation comes in Controller 4). This folder enrolls the admin and ends with a 15-minute lock; do not rerun against an already enrolled real account. Never export populated secrets or codes."
+                    : test.captureReset
+                      ? "Copy the token from the reset email into resetToken before sending request 30. Do not share an exported environment containing credentials or tokens."
+                      : "Users auth/profile. Use disposable accounts and the cookie jar. For automated runs only, set DEV_FIXED_CODE=123456 in a dedicated development server; regular development uses random email codes.",
   };
   const events = [
     {
@@ -273,7 +280,8 @@ function buildItem(test) {
     ...(test.staffManagement ||
     test.eventsController ||
     test.checkoutController ||
-    test.overviewController
+    test.overviewController ||
+    test.accountController
       ? { protocolProfileBehavior: { disableCookies: true } }
       : {}),
     request,
@@ -323,6 +331,7 @@ const collection = {
     ...checkoutVariables,
     ...overviewVariables,
     ...transactionVariables,
+    ...accountVariables,
   }).map(([key, value]) => ({
     key,
     value,
@@ -347,6 +356,7 @@ const collection = {
       name: "Controller 6 — Checkout & tickets",
       item: checkoutCases.map(buildItem),
     },
+    { name: "Controller 7 — Hiker account", item: accountCases.map(buildItem) },
     { name: "Admin — Overview", item: overviewCases.map(buildItem) },
     { name: "Admin — Audit log", item: auditCases.map(buildItem) },
     { name: "Admin — Transactions", item: transactionsCases.map(buildItem) },
@@ -430,4 +440,26 @@ await writeFile(
     checkoutRows.join("\n") +
     "\n\n" +
     checkoutDocs.slice(checkoutDocs.indexOf(checkoutEnd)),
+);
+
+const accountDocs = await readFile(docsUrl, "utf8");
+const accountStart = "<!-- Controller 7 ordered cases: start -->";
+const accountEnd = "<!-- Controller 7 ordered cases: end -->";
+if (!accountDocs.includes(accountStart) || !accountDocs.includes(accountEnd))
+  throw new Error("Controller 7 documentation markers are missing.");
+const accountRows = accountCases.map(
+  (test) =>
+    `| ${cell(test.name)} | ${test.method} \`${cell(test.path)}\` | ${cell(test.multipart ? `Multipart image: {{${test.multipart}}}` : test.body ? JSON.stringify(test.body) : "None")} | ${test.expected.status}: ${cell(test.expected.status >= 400 ? JSON.stringify(test.expected.body) : test.expected.status === 204 ? "No body" : JSON.stringify(test.expected.body))} |`,
+);
+await writeFile(
+  docsUrl,
+  accountDocs.slice(0, accountDocs.indexOf(accountStart)) +
+    accountStart +
+    "\n\n| Test | Method / URL | Request | Expected example |\n| --- | --- | --- | --- |\n" +
+    accountRows.join("\n") +
+    "\n\n" +
+    accountDocs.slice(accountDocs.indexOf(accountEnd)),
+);
+console.log(
+  `Generated ${accountCases.length} Controller 7 account checks with blank private variables.`,
 );

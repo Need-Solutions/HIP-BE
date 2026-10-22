@@ -14,6 +14,9 @@ export interface IEvent {
   description: string;
   coverImageUrl?: string;
   startsAt?: Date;
+  endsAt?: Date;
+  checkInOpensAt?: Date;
+  attendanceClosedAt?: Date;
   scheduleSet: boolean;
   durationLabel: string;
   meetingPoint: string;
@@ -41,6 +44,9 @@ const schema = new Schema<IEvent>(
     description: { type: String, default: "" },
     coverImageUrl: String,
     startsAt: Date,
+    endsAt: Date,
+    checkInOpensAt: Date,
+    attendanceClosedAt: Date,
     scheduleSet: { type: Boolean, default: false },
     durationLabel: { type: String, default: "" },
     meetingPoint: { type: String, default: "" },

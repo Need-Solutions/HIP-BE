@@ -33,8 +33,18 @@ export function ticketDetails(
     },
     isGuest: !ticket.holderUserId,
     paymentId: ticket.paymentId,
-    qrToken: ticket.qrToken,
-    status: ticket.status,
+    // Existing frontend enums remain compatible. A requested refund also suppresses the signed QR.
+    qrToken:
+      ["confirmed", "checked_in"].includes(ticket.status) &&
+      event.status !== "cancelled"
+        ? ticket.qrToken
+        : "",
+    status:
+      event.status === "cancelled"
+        ? "cancelled"
+        : ticket.status === "refund_pending"
+          ? "pending"
+          : ticket.status,
     issuedAt: ticket.issuedAt.toISOString(),
     ticketTypeName: ticket.ticketTypeName,
     event: ticketEvent(event),

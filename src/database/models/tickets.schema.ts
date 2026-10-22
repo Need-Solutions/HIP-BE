@@ -12,7 +12,13 @@ export interface ITicket {
   pricePaidKobo: number;
   paymentId: string;
   qrToken: string;
-  status: "confirmed" | "checked_in" | "cancelled" | "refunded" | "expired";
+  status:
+    | "confirmed"
+    | "refund_pending"
+    | "checked_in"
+    | "cancelled"
+    | "refunded"
+    | "expired";
   issuedAt: Date;
 }
 const schema = new Schema<ITicket>(
@@ -38,7 +44,14 @@ const schema = new Schema<ITicket>(
     qrToken: { type: String, required: true },
     status: {
       type: String,
-      enum: ["confirmed", "checked_in", "cancelled", "refunded", "expired"],
+      enum: [
+        "confirmed",
+        "refund_pending",
+        "checked_in",
+        "cancelled",
+        "refunded",
+        "expired",
+      ],
       default: "confirmed",
     },
     issuedAt: { type: Date, default: Date.now },
